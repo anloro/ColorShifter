@@ -9,6 +9,8 @@
 
 #include <map>
 #include <vector> 
+#include <algorithm>
+#include <numeric> 
 
 
 template<typename A, typename B>
@@ -25,7 +27,8 @@ std::multimap<B,A> flipMap(const std::map<A, B> &src){
 }
 
 template <typename T>
-std::vector<T> sort_indexes(const std::vector<T> &v) {
+std::vector<T> get_sorted_indexes(const std::vector<T> &v) {
+    // Returns the indexes of a sorted vector
 
     // initialize original index locations
     std::vector<T> idx(v.size());

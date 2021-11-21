@@ -8,15 +8,13 @@
 #include <iostream>
 #include <string>
 #include <map>
-#include <algorithm>
-#include <numeric> 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/core/cvstd.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include "colorTable.h"
 #include "utils.h"
-
+#include "image_analyzer.h"
 
 std::vector<int> ComputeHistogram(const cv::Mat &img, const int gridSize) 
 {
@@ -42,8 +40,8 @@ std::vector<int> ComputeHistogram(const cv::Mat &img, const int gridSize)
             int cluster_g = (int)(floor(g/binSize));
             int cluster_b = (int)(floor(b/binSize));
 
-            int cluster_n =  cluster_r + cluster_g*gridSize + cluster_b*gridSize_2; // [0, gridSize^3 -1]
-            histogram[cluster_n]++;
+            int cluster_id =  cluster_r + cluster_g*gridSize + cluster_b*gridSize_2; // [0, gridSize^3 -1]
+            histogram[cluster_id]++;
         }
     }
 
@@ -116,9 +114,9 @@ void changeColor(cv::Mat &img, int gridSize, int cluster, Color newColor, ColorT
             int cluster_g = (int)(floor(g/binSize));
             int cluster_b = (int)(floor(b/binSize));
 
-            int cluster_n =  cluster_r + cluster_g*gridSize + cluster_b*gridSize_2; // [0, gridSize^3 -1]
+            int cluster_id =  cluster_r + cluster_g*gridSize + cluster_b*gridSize_2; // [0, gridSize^3 -1]
 
-            if(cluster == cluster_n){
+            if(cluster == cluster_id){
                 uchar n_r = std::max(std::min(r + t_r, 255), 0); 
                 uchar n_g = std::max(std::min(g + t_g, 255), 0);                
                 uchar n_b = std::max(std::min(b + t_b, 255), 0);
@@ -165,9 +163,9 @@ void hueShift(cv::Mat &img, int gridSize, int cluster, Color newColor, ColorTabl
             int cluster_g = (int)(floor(g/binSize));
             int cluster_b = (int)(floor(b/binSize));
 
-            int cluster_n =  cluster_r + cluster_g*gridSize + cluster_b*gridSize_2; // [0, gridSize^3 -1]
+            int cluster_id =  cluster_r + cluster_g*gridSize + cluster_b*gridSize_2; // [0, gridSize^3 -1]
 
-            if(cluster == cluster_n){
+            if(cluster == cluster_id){
                 cv::Mat3b pixelColorHsv, newPixelColorBGR;
                 cv::cvtColor(cv::Mat3b(cv::Vec3b(b, g, r)), pixelColorHsv, cv::COLOR_BGR2HSV);
                 int pixelHue = pixelColorHsv[0][0][0];
@@ -207,18 +205,19 @@ int main(int argc, char** argv)
     table.GenerateColorTable(gridSize);
     std::vector<int> hist;
     hist = ComputeHistogram(img, gridSize);
-    std::vector<int> ind = sort_indexes<int>(hist);
-    std::vector<cv::Vec3b> palette;
+
+    std::vector<int> ind = get_sorted_indexes<int>(hist);
 
     // get the palette
     int b, g, r;
     int paletteSize = 5;
-    for(int i = 0; i < paletteSize; i++){
-        std::string color = std::to_string(ind.at(i));
-        table.GetRGB(color, b, g, r);
-        printf("b %i, g %i, r %i \n", b, g, r);
-        palette.push_back(cv::Vec3b(b, g, r));
-    }
+    
+    // get the palette
+    ImgAnalyzerFactory analyzerCreator = ImgAnalyzerFactory();
+    ImgAnalyzer* analyzer = analyzerCreator.GetAnalyzer();
+
+    std::vector<cv::Vec3b> palette = analyzer->GetColorPalette(img);
+    delete analyzer;
 
     cv::Mat palette_img = getPaletteImg(palette, img);
     cv::imshow("image with palette", palette_img);
@@ -287,7 +286,7 @@ int main(int argc, char** argv)
     // cv::destroyWindow("image modified Hue");
     // cv::destroyWindow("image modified RGB");
 
-    cv::destroyWindow("image");
+    cv::destroyWindow("image with palette");
     cv::destroyWindow("image with palette Hue");
     cv::destroyWindow("image with palette RGB");
 
