@@ -10,6 +10,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <map>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/core/cvstd.hpp>
 #include <opencv2/highgui.hpp>
@@ -21,19 +22,33 @@
  * implement.
  */
 class ImgAnalyzer {
- public:
-  virtual std::vector<cv::Vec3b> GetColorPalette(const cv::Mat &img) = 0;
+public:
+    virtual void ProcessImg(const cv::Mat &img) = 0;
+    virtual std::vector<cv::Vec3b> GetColorPalette() = 0;
+    virtual void SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) = 0;
+    virtual void HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) = 0;
 };
 
 class BGRImgAnalyzer : public ImgAnalyzer {
 public:
-    std::vector<cv::Vec3b> GetColorPalette(const cv::Mat &img) override;
+    ~BGRImgAnalyzer(){delete _img;}
+    void ProcessImg(const cv::Mat &img) override;
+    std::vector<cv::Vec3b> GetColorPalette() override;
+    void SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) override;
+    void HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) override;
 private:
-    std::vector<int> ComputeHistogram(const std::map<cv::Point, int> clusters);
-    std::map<cv::Point, int> FixedSizeGridClusterization(const cv::Mat &img, const int gridSize);
+    void Initialize();
+    std::vector<int> ComputeHistogram();
+    std::map<int, int> FixedSizeGridClusterization(const cv::Mat &img);
+    int GetClusterId(const int b, const int g, const int r);
+    int GetPixelId(cv::Point pixelCoordinates, int maxColums);
+    cv::Point GetPixelCoordinates(int pixelId, int maxColums);
 
+    cv::Mat* _img;
     ColorTable _table; // Depicts the centers of the clusters in BGR format
-    std::map<cv::Point, int> _clusters;
+    std::map<int, int> _clusters; // [pixelId, clusterId]
+    int _gridSize;
+    int _paletteSize;
 };
 
 // class HSVImgAnalyzer : public ImgAnalyzer {
