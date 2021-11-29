@@ -26,9 +26,10 @@ public:
     ColorTable() = default;
 
     // MEMBER FUNCTIONS
-    void GenerateColorTable(int gridSize);
+    void GenerateBGRColorTable(int gridSize);
+    void GenerateHSVColorTable(int gridSize);
     std::string LookUpColor(int r, int g, int b);
-    void GetRGB(std::string color_name, int &r, int &g, int &b);
+    void GetBGR(std::string color_name, int &r, int &g, int &b);
 
 private:
     // This is a color table with the format

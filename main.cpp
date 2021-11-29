@@ -86,7 +86,7 @@ int main(int argc, char** argv)
 
     // Image analysis and proccessing
     ImgAnalyzerFactory analyzerCreator = ImgAnalyzerFactory();
-    ImgAnalyzer* analyzer = analyzerCreator.GetAnalyzer();
+    ImgAnalyzer* analyzer = analyzerCreator.GetObject();
     analyzer->ProcessImg(img);
     // get the palette
     std::vector<cv::Vec3b> palette = analyzer->GetColorPalette();
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
     // SaveImg(imgPath, palette_img);
 
     // change single color
-    int indColor = 1;
+    int indColor = 4;
     cv::Mat imgNewColor = img.clone();
     cv::Vec3b newColor =  cv::Vec3b(0, 255, 255); 
     analyzer->HueShift(palette[indColor], newColor, imgNewColor);

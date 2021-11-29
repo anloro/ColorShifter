@@ -7,22 +7,44 @@
 
 #include "colorTable.h"
 #include <tgmath.h> 
+#include <opencv2/imgproc.hpp>
 
-void ColorTable::GenerateColorTable(int gridSize){
+void ColorTable::GenerateBGRColorTable(int gridSize){
     std::unordered_map<std::string, Color> table;
     int gridSize_2 = gridSize*gridSize;
     int gridSize_3 = gridSize*gridSize*gridSize;
     double binSize = 256.0/gridSize;
-    int binSize_h = (int)(binSize/2);
+    int binSize_half = (int)(binSize/2);
 
     for(int i = 0; i < gridSize_3; i++){
         int cluster_r, cluster_g, cluster_b;
         cluster_r = (i%gridSize_2)%gridSize;
         cluster_g = floor((i%gridSize_2)/gridSize);
         cluster_b = floor(i/gridSize_2);
-        int r = (int)(cluster_r*binSize) + binSize_h;
-        int g = (int)(cluster_g*binSize) + binSize_h;
-        int b = (int)(cluster_b*binSize) + binSize_h;
+        int r = (int)(cluster_r*binSize) + binSize_half;
+        int g = (int)(cluster_g*binSize) + binSize_half;
+        int b = (int)(cluster_b*binSize) + binSize_half;
+        table.insert({std::to_string(i), Color{b, g, r}});
+    }
+
+    this->table = table;
+}
+
+void ColorTable::GenerateHSVColorTable(int bins){
+    std::unordered_map<std::string, Color> table;
+    double binSize = 181.0/bins;
+    int binSize_half = (int)(binSize/2);
+
+    for(int i = 0; i < bins; i++){
+        int hue = (int)(i*binSize) + binSize_half;
+
+        cv::Mat3b ColorBGRMat; 
+        cv::Mat3b ColorHsvMat(cv::Vec3b(hue, 255, 255));
+        cv::cvtColor(ColorHsvMat, ColorBGRMat, cv::COLOR_HSV2BGR);
+
+        int r = ColorBGRMat[0][0][2];
+        int g = ColorBGRMat[0][0][1];
+        int b = ColorBGRMat[0][0][0];
         table.insert({std::to_string(i), Color{b, g, r}});
     }
 
@@ -54,7 +76,7 @@ std::string ColorTable::LookUpColor(int b, int g, int r){
     return color_name;
 }
 
-void ColorTable::GetRGB(std::string color_name, int &b, int &g, int &r){
+void ColorTable::GetBGR(std::string color_name, int &b, int &g, int &r){
     Color c = this->table.at(color_name);
     r = c.r;
     g = c.g;
