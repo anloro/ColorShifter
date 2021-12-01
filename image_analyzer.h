@@ -16,67 +16,27 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include "colorTable.h"
+#include "clusterer.h"
 
 /**
  * The ImgAnalyzer interface declares the operations that all concrete products must
  * implement.
  */
-class ImgAnalyzer {
+class ImgProcessor{
 public:
-    virtual void ProcessImg(const cv::Mat &img) = 0;
-    virtual std::vector<cv::Vec3b> GetColorPalette() = 0;
-    virtual void SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) = 0;
-    virtual void HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) = 0;
-protected:
-    int GetPixelId(cv::Point pixelCoordinates, int maxColums);
-    cv::Point GetPixelCoordinates(int pixelId, int maxColums);
-};
-
-class BGRImgAnalyzer : public ImgAnalyzer {
-public:
-    ~BGRImgAnalyzer(){delete _img;}
-    void ProcessImg(const cv::Mat &img) override;
-    std::vector<cv::Vec3b> GetColorPalette() override;
-    void SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) override;
-    void HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) override;
+    ~ImgProcessor(){delete _clusterer;}
+    void ProcessImg(const cv::Mat &img);
+    std::vector<cv::Vec3b> GetColorPalette();
+    void SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img);
+    void HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img);
 private:
     void Initialize();
-    std::vector<int> ComputeHistogram();
-    std::map<int, int> FixedSizeGridClusterization(const cv::Mat &img);
-    int GetClusterId(const int b, const int g, const int r);
+    std::vector<int> ComputeHistogram(cv::InputArray in);
+    int GetClusterId(const cv::Vec3b sample, const std::vector<cv::Vec3b> centers);
+    int ComputeDistance(const cv::Vec3b point1, const cv::Vec3b point2);
 
-    cv::Mat* _img;
-    ColorTable _table; // Depicts the centers of the clusters in BGR format
-    std::map<int, int> _clusters; // [pixelId, clusterId]
-    int _gridSize;
     int _paletteSize;
-};
-
-class HSVImgAnalyzer : public ImgAnalyzer {
-public:
-    ~HSVImgAnalyzer(){delete _img;}
-    void ProcessImg(const cv::Mat &img) override;
-    std::vector<cv::Vec3b> GetColorPalette() override;
-    void SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) override;
-    void HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img) override;
-private:
-    void Initialize();
-    std::vector<int> ComputeHistogram();
-    std::map<int, int> FixedSizeClusterization(const cv::Mat &img);
-    int GetClusterId(const int hue);
-
-    cv::Mat* _img;
-    ColorTable _table; // Depicts the centers of the clusters in Hue
-    std::map<int, int> _clusters; // [pixelId, clusterId]
-    int _bins;
-    int _paletteSize;
-};
-
-class ImgAnalyzerFactory {
-public:
-    ~ImgAnalyzerFactory(){delete product;}
-    ImgAnalyzer* GetObject();
-
-private:
-    ImgAnalyzer* product;
+    Clusterer * _clusterer;
+    cv::Mat _labels;
+    std::vector<cv::Vec3b> _centers;
 };

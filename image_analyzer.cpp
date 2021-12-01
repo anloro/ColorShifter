@@ -10,37 +10,34 @@
 #include "utils.h"
 
 
-void BGRImgAnalyzer::Initialize(){
+void ImgProcessor::Initialize(){
     // Get these from a configuration file
     int paletteSize = 5;
-    int gridSize = 3;
+
+    ClustererFactory clustererCreator = ClustererFactory();
+    _clusterer = clustererCreator.GetObject();
 
     _paletteSize = paletteSize;
-    _gridSize = gridSize;
 }
 
-void BGRImgAnalyzer::ProcessImg(const cv::Mat &img){
+void ImgProcessor::ProcessImg(const cv::Mat &img){
 
     this->Initialize();
-    cv::Mat * img_p;
-    cv::Mat imgClone = img.clone();
-    img_p = &imgClone;
-    _img = img_p;
-    _table.GenerateBGRColorTable(_gridSize);
-    _clusters = FixedSizeGridClusterization(img);
+    _clusterer->ComputeClusters(img, _labels, _centers);
 }
 
-std::vector<cv::Vec3b> BGRImgAnalyzer::GetColorPalette(){
+std::vector<cv::Vec3b> ImgProcessor::GetColorPalette(){
 
-    std::vector<int> hist = ComputeHistogram();
+    std::vector<int> hist = ComputeHistogram(_labels);
     std::vector<int> ind = get_sorted_indexes<int>(hist);
     std::vector<cv::Vec3b> palette;
 
     // Get the palette
-    int b, g, r;
     for(int i = 0; i < _paletteSize; i++){
-        std::string color = std::to_string(ind.at(i));
-        _table.GetBGR(color, b, g, r);
+        cv::Vec3b color = _centers[ind[i]];
+        int b = color[0];
+        int g = color[1];
+        int r = color[2];
         printf("b %i, g %i, r %i \n", b, g, r);
         palette.push_back(cv::Vec3b(b, g, r));
     }
@@ -49,65 +46,31 @@ std::vector<cv::Vec3b> BGRImgAnalyzer::GetColorPalette(){
 }
 
 /*  ---------------------------------------------------------
-    Clusterization with fixed size grid & ordering using a histogram
+    Compute histogram
     ---------------------------------------------------------*/
-std::vector<int> BGRImgAnalyzer::ComputeHistogram()
-{      
-    std::vector<int> histogram(_gridSize*_gridSize*_gridSize, 0);
-
-    for(auto const& n: _clusters)
-    {
-        histogram[n.second]++;
-    }
-
-    return histogram;
-}
-
-std::map<int, int> BGRImgAnalyzer::FixedSizeGridClusterization(const cv::Mat &img)
+std::vector<int> ImgProcessor::ComputeHistogram(cv::InputArray in)
 {
-    std::vector<cv::Mat> channels;
-    cv::split(img,channels);
+    cv::Mat mat(in.size(), in.type());
+    in.copyTo(mat);
 
-    std::map<int, int> clusters;
+    std::vector<int> histogram(_centers.size(), 0);
 
-    // Clusterization using a grid of fixed size
-    for(int row = 0; row < img.rows; row++)
+    for(int row = 0; row < mat.rows; row++)
     {
-        for(int col = 0; col < img.cols; col++)
+        for(int col = 0; col < mat.cols; col++)
         {
-            // OpenCV reads image in BGR format
-            int r = channels[2].at<uchar>(row, col);
-            int g = channels[1].at<uchar>(row, col);
-            int b = channels[0].at<uchar>(row, col);
-
-            int clusterId =  GetClusterId(b, g, r);
-            int key = GetPixelId(cv::Point(row, col), img.cols);
-            clusters.insert(std::pair<int, int>(key, clusterId)); // (pixel, clusterId)
+            int clusterId = mat.at<int>(row, col);
+            histogram[clusterId]++;
         }
     }
 
-    std::vector<cv::Mat>().swap(channels);
-    return clusters;
-}
-
-int BGRImgAnalyzer::GetClusterId(const int b, const int g, const int r)
-{
-    int clusterId;
-    double binSize = 256.0 / _gridSize; // BGR range is [0, 255]
-
-    int clusterR = (int)(floor(r/binSize)); // bounded between [0, gridSize-1]
-    int clusterG = (int)(floor(g/binSize));
-    int clusterB = (int)(floor(b/binSize));
-
-    clusterId =  clusterR + clusterG*_gridSize + clusterB*_gridSize*_gridSize; // [0, gridSize^3 -1]
-
-    return clusterId;
+    return histogram;
 }
 
 /*  ---------------------------------------------------------
     Color change methods
     ---------------------------------------------------------*/
-void BGRImgAnalyzer::SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){        
+void ImgProcessor::SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){
 
     int r, g, b;
     r = color[2];
@@ -115,272 +78,100 @@ void BGRImgAnalyzer::SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Ma
     b = color[0];
 
     int rTransform, gTransform, bTransform;
-    rTransform = newColor[2] - r; 
-    gTransform = newColor[1] - g; 
+    rTransform = newColor[2] - r;
+    gTransform = newColor[1] - g;
     bTransform = newColor[0] - b;
 
-    int colorClusterId = GetClusterId(b, g, r);
-    for(auto const& n: _clusters)
+    int colorClusterId = GetClusterId(color, _centers);
+    for(int row = 0; row < img.rows; row++)
     {
-        if(n.second == colorClusterId){
-            cv::Point pixelCoordinates = GetPixelCoordinates(n.first, img.cols);
-            int row = pixelCoordinates.x;
-            int columm = pixelCoordinates.y;
+        for(int col = 0; col < img.cols; col++)
+        {
+            if(_labels.at<int>(row, col) == colorClusterId){
 
-            cv::Vec3b colorVec = img.at<cv::Vec3b>(row, columm);
-            r = colorVec[2];
-            g = colorVec[1];
-            b = colorVec[0];
+                cv::Vec3b colorVec = img.at<cv::Vec3b>(row, col);
+                r = colorVec[2];
+                g = colorVec[1];
+                b = colorVec[0];
 
-            uchar newR = std::max(std::min(r + rTransform, 255), 0); 
-            uchar newG = std::max(std::min(g + gTransform, 255), 0);                
-            uchar newB = std::max(std::min(b + bTransform, 255), 0);
-            cv::Vec3b newColorVec = cv::Vec3b(newB, newG, newR);
-            
-            img.at<cv::Vec3b>(row, columm) = newColorVec;
+                uchar newR = std::max(std::min(r + rTransform, 255), 0);
+                uchar newG = std::max(std::min(g + gTransform, 255), 0);
+                uchar newB = std::max(std::min(b + bTransform, 255), 0);
+                cv::Vec3b newColorVec = cv::Vec3b(newB, newG, newR);
+                
+                img.at<cv::Vec3b>(row, col) = newColorVec;
+            }
         }
     }
 }
 
-void BGRImgAnalyzer::HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){        
+void ImgProcessor::HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){        
 
-    int r, g, b;
+    int r, g, b, nr, ng, nb;
     r = color[2];
     g = color[1];
     b = color[0];
+    nr = newColor[2];
+    ng = newColor[1];
+    nb = newColor[0];
 
     cv::Mat3b newColorHsvMat, ColorHsvMat; 
-    cv::Mat3b newColorBGRMat(cv::Vec3b(newColor[2], newColor[1], newColor[0]));
+    cv::Mat3b newColorBGRMat(cv::Vec3b(nb, ng, nr));
     cv::cvtColor(newColorBGRMat, newColorHsvMat, cv::COLOR_BGR2HSV);
-    cv::Mat3b ColorBGRMat(cv::Vec3b(color[2], color[1], color[0]));
+    cv::Mat3b ColorBGRMat(cv::Vec3b(b, g, r));
     cv::cvtColor(ColorBGRMat, ColorHsvMat, cv::COLOR_BGR2HSV);
 
-    int hueTransform = newColorHsvMat[0][0][0] - ColorHsvMat[0][0][0]; 
+    int colorHue = ColorHsvMat[0][0][0];
+    int newColorHue = newColorHsvMat[0][0][0];
+    int hueTransform = newColorHue - colorHue; 
 
     cv::Mat imgHSV;
     cv::cvtColor(img, imgHSV, cv::COLOR_BGR2HSV);
-    int colorClusterId = GetClusterId(b, g, r);
-    for(auto const& n: _clusters)
+    int colorClusterId = GetClusterId(color, _centers);
+    for(int row = 0; row < img.rows; row++)
     {
-        if(n.second == colorClusterId){
-            cv::Point pixelCoordinates = GetPixelCoordinates(n.first, img.cols);
-            int row = pixelCoordinates.x;
-            int columm = pixelCoordinates.y;
+        for(int col = 0; col < img.cols; col++)
+        {
+            if(_labels.at<int>(row, col) == colorClusterId){
+                cv::Vec3b colorVec = imgHSV.at<cv::Vec3b>(row, col);
+                int hue = colorVec[0];
+                int sat = colorVec[1];
+                int val = colorVec[2];
 
-            cv::Vec3b colorVec = imgHSV.at<cv::Vec3b>(row, columm);
-            int hue = colorVec[0];
-            int sat = colorVec[1];
-            int val = colorVec[2];
-
-            uchar newHue = (hue + hueTransform)%180; 
-            cv::Vec3b newColorVec = cv::Vec3b(newHue, sat, val);
-            
-            imgHSV.at<cv::Vec3b>(row, columm) = newColorVec;
+                uchar newHue = (hue + hueTransform)%180; 
+                cv::Vec3b newColorVec = cv::Vec3b(newHue, sat, val);
+                
+                imgHSV.at<cv::Vec3b>(row, col) = newColorVec;
+            }
         }
     }
 
     cv::cvtColor(imgHSV, img, cv::COLOR_HSV2BGR);
 }
 
-void HSVImgAnalyzer::Initialize(){
-    // Get these from a configuration file
-    int paletteSize = 5;
-    int bins = 8;
+int ImgProcessor::GetClusterId(const cv::Vec3b sample, const std::vector<cv::Vec3b> centers){
+    int clusterId, distance, minDistance;
+    minDistance = ComputeDistance(sample, centers.at(0));
+    clusterId = 0;
 
-    _paletteSize = paletteSize;
-    _bins = bins;
-}
-
-void HSVImgAnalyzer::ProcessImg(const cv::Mat &img){
-
-    this->Initialize();
-    cv::Mat * img_p;
-    cv::Mat imgClone = img.clone();
-    img_p = &imgClone;
-    _img = img_p;
-    _table.GenerateHSVColorTable(_bins);
-    _clusters = FixedSizeClusterization(img);
-}
-
-std::vector<cv::Vec3b> HSVImgAnalyzer::GetColorPalette(){
-
-    std::vector<int> hist = ComputeHistogram();
-    std::vector<int> ind = get_sorted_indexes<int>(hist);
-    std::vector<cv::Vec3b> palette;
-
-    // Get the palette
-    int b, g, r;
-    for(int i = 0; i < _paletteSize; i++){
-        std::string color = std::to_string(ind.at(i));
-        _table.GetBGR(color, b, g, r);
-        printf("b %i, g %i, r %i \n", b, g, r);
-        palette.push_back(cv::Vec3b(b, g, r));
-    }
-
-    return palette;
-}
-
-std::vector<int> HSVImgAnalyzer::ComputeHistogram()
-{      
-    std::vector<int> histogram(_bins, 0);
-
-    for(auto const& n: _clusters)
-    {
-        histogram[n.second]++;
-    }
-
-    return histogram;
-}
-
-std::map<int, int> HSVImgAnalyzer::FixedSizeClusterization(const cv::Mat &img)
-{
-    cv::Mat imgHSV;
-    cv::cvtColor(img, imgHSV, cv::COLOR_BGR2HSV);
-    std::vector<cv::Mat> channels;
-    cv::split(imgHSV,channels);
-
-    std::map<int, int> clusters;
-
-    // Clusterization using a grid of fixed size
-    for(int row = 0; row < imgHSV.rows; row++)
-    {
-        for(int col = 0; col < imgHSV.cols; col++)
-        {
-            // OpenCV reads image in BGR format
-            int hue = channels[0].at<uchar>(row, col);
-
-            int clusterId = GetClusterId(hue);
-            int key = GetPixelId(cv::Point(row, col), imgHSV.cols);
-            clusters.insert(std::pair<int, int>(key, clusterId)); // (pixel, clusterId)
+    for(int i = 1; i<centers.size(); i++){
+        distance = ComputeDistance(sample, centers.at(i));
+        if(distance < minDistance){
+            minDistance = distance;
+            clusterId = i;
         }
     }
-
-    std::vector<cv::Mat>().swap(channels);
-    return clusters;
-}
-
-int HSVImgAnalyzer::GetClusterId(const int hue)
-{
-    int clusterId;
-    double binSize = 181.0 / _bins; // Hue range is [0, 180]
-
-    clusterId =  (int)(floor(hue/binSize)); // [0, gridSize^3 -1]
 
     return clusterId;
 }
 
-void HSVImgAnalyzer::SubstituteColor(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){        
+int ImgProcessor::ComputeDistance(const cv::Vec3b point1, const cv::Vec3b point2){
+    int distance, distX, distY, distZ;
 
-    int r, g, b;
-    r = color[2];
-    g = color[1];
-    b = color[0];
+    distX = point1[0] - point2[0];
+    distY = point1[1] - point2[1];
+    distZ = point1[2] - point2[2];
+    distance = sqrt(pow(distX, 2) + pow(distY, 2) + pow(distZ, 2));
 
-    int rTransform, gTransform, bTransform;
-    rTransform = newColor[2] - r; 
-    gTransform = newColor[1] - g; 
-    bTransform = newColor[0] - b;
-
-    cv::Mat3b ColorHsvMat; 
-    cv::Mat3b ColorBGRMat(cv::Vec3b(color[2], color[1], color[0]));
-    cv::cvtColor(ColorBGRMat, ColorHsvMat, cv::COLOR_BGR2HSV);
-    int colorClusterId = GetClusterId(ColorHsvMat[0][0][0]);
-    for(auto const& n: _clusters)
-    {
-        if(n.second == colorClusterId){
-            cv::Point pixelCoordinates = GetPixelCoordinates(n.first, img.cols);
-            int row = pixelCoordinates.x;
-            int columm = pixelCoordinates.y;
-
-            cv::Vec3b colorVec = img.at<cv::Vec3b>(row, columm);
-            r = colorVec[2];
-            g = colorVec[1];
-            b = colorVec[0];
-
-            uchar newR = std::max(std::min(r + rTransform, 255), 0); 
-            uchar newG = std::max(std::min(g + gTransform, 255), 0);                
-            uchar newB = std::max(std::min(b + bTransform, 255), 0);
-            cv::Vec3b newColorVec = cv::Vec3b(newB, newG, newR);
-            
-            img.at<cv::Vec3b>(row, columm) = newColorVec;
-        }
-    }
-}
-
-void HSVImgAnalyzer::HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){        
-
-    int r, g, b;
-    r = color[2];
-    g = color[1];
-    b = color[0];
-
-    cv::Mat3b newColorHsvMat, ColorHsvMat; 
-    cv::Mat3b newColorBGRMat(cv::Vec3b(newColor[2], newColor[1], newColor[0]));
-    cv::cvtColor(newColorBGRMat, newColorHsvMat, cv::COLOR_BGR2HSV);
-    cv::Mat3b ColorBGRMat(cv::Vec3b(color[2], color[1], color[0]));
-    cv::cvtColor(ColorBGRMat, ColorHsvMat, cv::COLOR_BGR2HSV);
-
-    int hueTransform = newColorHsvMat[0][0][0] - ColorHsvMat[0][0][0]; 
-
-    cv::Mat imgHSV;
-    cv::cvtColor(img, imgHSV, cv::COLOR_BGR2HSV);
-    int colorClusterId = GetClusterId(ColorHsvMat[0][0][0]);
-    for(auto const& n: _clusters)
-    {
-        if(n.second == colorClusterId){
-            cv::Point pixelCoordinates = GetPixelCoordinates(n.first, img.cols);
-            int row = pixelCoordinates.x;
-            int columm = pixelCoordinates.y;
-
-            cv::Vec3b colorVec = imgHSV.at<cv::Vec3b>(row, columm);
-            int hue = colorVec[0];
-            int sat = colorVec[1];
-            int val = colorVec[2];
-
-            uchar newHue = (hue + hueTransform)%180; 
-            cv::Vec3b newColorVec = cv::Vec3b(newHue, sat, val);
-            
-            imgHSV.at<cv::Vec3b>(row, columm) = newColorVec;
-        }
-    }
-
-    cv::cvtColor(imgHSV, img, cv::COLOR_HSV2BGR);
-}
-
-/*  ---------------------------------------------------------
-    Codification of pixel positions
-    ---------------------------------------------------------*/
-int ImgAnalyzer::GetPixelId(cv::Point pixelCoordinates, int maxColums){
-    int row = pixelCoordinates.x;
-    int col = pixelCoordinates.y;
-    return row*maxColums + col;
-}
-
-cv::Point ImgAnalyzer::GetPixelCoordinates(int pixelId, int maxColums){
-    int row = floor(pixelId/maxColums);
-    int col = pixelId%maxColums;
-    return cv::Point(row, col);
-}
-
-/*  ---------------------------------------------------------
-    Factory
-    ---------------------------------------------------------*/
-ImgAnalyzer* ImgAnalyzerFactory::GetObject(){
-    // Get this option from a configuration file
-    int option = 2;
-
-    switch (option)
-    {
-        case 1:
-            product = new BGRImgAnalyzer;
-            break;
-        case 2:
-            product = new HSVImgAnalyzer;
-            break;
-        default:
-            product = nullptr;
-            break;
-    }
-
-    return product;
+    return distance;
 }

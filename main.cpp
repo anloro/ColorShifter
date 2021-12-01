@@ -85,11 +85,10 @@ int main(int argc, char** argv)
 	cv::resize(img.clone(), img, cv::Size(), scale, scale, cv::INTER_LINEAR);
 
     // Image analysis and proccessing
-    ImgAnalyzerFactory analyzerCreator = ImgAnalyzerFactory();
-    ImgAnalyzer* analyzer = analyzerCreator.GetObject();
-    analyzer->ProcessImg(img);
+    ImgProcessor analyzer = ImgProcessor();
+    analyzer.ProcessImg(img);
     // get the palette
-    std::vector<cv::Vec3b> palette = analyzer->GetColorPalette();
+    std::vector<cv::Vec3b> palette = analyzer.GetColorPalette();
 
     cv::Mat palette_img = getImgWithPalette(palette, img);
     cv::imshow("image with palette", palette_img);
@@ -99,7 +98,8 @@ int main(int argc, char** argv)
     int indColor = 4;
     cv::Mat imgNewColor = img.clone();
     cv::Vec3b newColor =  cv::Vec3b(0, 255, 255); 
-    analyzer->HueShift(palette[indColor], newColor, imgNewColor);
+    analyzer.HueShift(palette[indColor], newColor, imgNewColor);
+    // analyzer.SubstituteColor(palette[indColor], newColor, imgNewColor);
     auto newPalette = palette; // vector assignment makes a copy
     newPalette[indColor] = newColor;
     palette_img = getImgWithPalette(newPalette, imgNewColor);

@@ -8,6 +8,7 @@
 
 #include "clusterer.h"
 #include "utils.h"
+#include <opencv2/imgproc.hpp>
 
 /*  ---------------------------------------------------------
     BGR clusterization
@@ -18,22 +19,19 @@ BGRClusterer::BGRClusterer(){
 
 void BGRClusterer::ComputeClusters(const cv::Mat &img, cv::InputOutputArray &labels, std::vector<cv::Vec3b> &centers){
     FixedSizeGridClusterization(img);
-    GetCenters();
-    // labels.create(_labels.size(), _labels.type());
+    ComputeCenters();
     _labels.copyTo(labels);
     centers = _centers;
 }
 
 void BGRClusterer::Initialize(){
     // Get these from a configuration file
-    int paletteSize = 5;
     int gridSize = 3;
 
-    _paletteSize = paletteSize;
     _gridSize = gridSize;
 }
 
-void BGRClusterer::GetCenters(){
+void BGRClusterer::ComputeCenters(){
     std::vector<cv::Vec3b> centers;
 
     int gridSize_2 = _gridSize*_gridSize;
@@ -55,29 +53,11 @@ void BGRClusterer::GetCenters(){
     _centers = centers;
 }
 
-/*  ---------------------------------------------------------
-    Clusterization with fixed size grid & ordering using a histogram
-    ---------------------------------------------------------*/
-// std::vector<int> BGRClusterer::ComputeHistogram()
-// {      
-//     std::vector<int> histogram(_gridSize*_gridSize*_gridSize, 0);
-
-//     int length = _labels.rows*_labels.cols;
-//     for(int i=0; i<length; i++)
-//     {
-//         histogram[_labels.at<int>(i)]++;
-//     }
-
-//     return histogram;
-// }
-
 void BGRClusterer::FixedSizeGridClusterization(const cv::Mat &img)
 {
     std::vector<cv::Mat> channels;
     cv::split(img,channels);
 
-    // std::map<int, int> labels;
-    // cv::Mat points(_gridSize*_gridSize*_gridSize, 1, CV_32FC3), labels;
     cv::Mat labels = cv::Mat(img.size(), CV_32FC1);
 
     // Clusterization using a grid of fixed size
@@ -91,15 +71,12 @@ void BGRClusterer::FixedSizeGridClusterization(const cv::Mat &img)
             int b = channels[0].at<uchar>(row, col);
 
             int clusterId =  GetClusterId(b, g, r);
-            int key = GetPixelId(cv::Point(row, col), img.cols);
-            // labels.insert(std::pair<int, int>(key, clusterId)); // (pixel, clusterId)
-            // labels.at<int>(key) = clusterId;
-            labels.at<int>(row, col);
+            labels.at<int>(row, col) = clusterId;
         }
     }
 
     std::vector<cv::Mat>().swap(channels);
-    _labels = labels; 
+    labels.copyTo(_labels);
 }
 
 int BGRClusterer::GetClusterId(const int b, const int g, const int r)
@@ -112,6 +89,84 @@ int BGRClusterer::GetClusterId(const int b, const int g, const int r)
     int clusterB = (int)(floor(b/binSize));
 
     clusterId =  clusterR + clusterG*_gridSize + clusterB*_gridSize*_gridSize; // [0, gridSize^3 -1]
+
+    return clusterId;
+}
+
+/*  ---------------------------------------------------------
+    Hue Clusterer member functions
+    ---------------------------------------------------------*/
+HueClusterer::HueClusterer(){
+    this->Initialize();
+}
+
+void HueClusterer::ComputeClusters(const cv::Mat &img, cv::InputOutputArray &labels, std::vector<cv::Vec3b> &centers){
+    FixedSizeGridClusterization(img);
+    ComputeCenters();
+    _labels.copyTo(labels);
+    centers = _centers;
+}
+
+void HueClusterer::Initialize(){
+    // Get these from a configuration file
+    int gridSize = 8;
+
+    _gridSize = gridSize;
+}
+
+void HueClusterer::ComputeCenters(){
+    std::vector<cv::Vec3b> centers;
+
+    double binSize = 181.0/_gridSize;
+    int binSize_half = (int)(binSize/2);
+
+    for(int i = 0; i < _gridSize; i++){
+        int hue = (int)(i*binSize) + binSize_half;
+
+        cv::Mat3b ColorBGRMat; 
+        cv::Mat3b ColorHsvMat(cv::Vec3b(hue, 255, 255));
+        cv::cvtColor(ColorHsvMat, ColorBGRMat, cv::COLOR_HSV2BGR);
+
+        int r = ColorBGRMat[0][0][2];
+        int g = ColorBGRMat[0][0][1];
+        int b = ColorBGRMat[0][0][0];
+        centers.push_back(cv::Vec3b(b, g, r));
+    }
+
+    _centers = centers;
+}
+
+void HueClusterer::FixedSizeGridClusterization(const cv::Mat &img)
+{
+    cv::Mat imgHSV;
+    cv::cvtColor(img, imgHSV, cv::COLOR_BGR2HSV);
+    std::vector<cv::Mat> channels;
+    cv::split(imgHSV,channels);
+
+    cv::Mat labels = cv::Mat(img.size(), CV_32FC1);
+
+    // Clusterization using a grid of fixed size
+    for(int row = 0; row < imgHSV.rows; row++)
+    {
+        for(int col = 0; col < imgHSV.cols; col++)
+        {
+            int hue = channels[0].at<uchar>(row, col);
+
+            int clusterId = GetClusterId(hue);
+            labels.at<int>(row, col) = clusterId;
+        }
+    }
+
+    std::vector<cv::Mat>().swap(channels);
+    _labels = labels;
+}
+
+int HueClusterer::GetClusterId(const int hue)
+{
+    int clusterId;
+    double binSize = 181.0 / _gridSize; // Hue range is [0, 180]
+
+    clusterId =  (int)(floor(hue/binSize)); // [0, gridSize^3 -1]
 
     return clusterId;
 }
@@ -136,7 +191,7 @@ cv::Point Clusterer::GetPixelCoordinates(int pixelId, int maxColums){
     ---------------------------------------------------------*/
 Clusterer* ClustererFactory::GetObject(){
     // Get this option from a configuration file
-    int option = 1;
+    int option = 2;
 
     switch (option)
     {
