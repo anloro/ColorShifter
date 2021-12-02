@@ -15,7 +15,6 @@
 #include <opencv2/core/cvstd.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include "colorTable.h"
 #include "clusterer.h"
 
 /**

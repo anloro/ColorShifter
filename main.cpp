@@ -12,9 +12,8 @@
 #include <opencv2/core/cvstd.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include "colorTable.h"
 #include "utils.h"
-#include "image_analyzer.h"
+#include "image_processor.h"
 
 
 void showPalette(std::vector<cv::Vec3b> colors){
@@ -69,7 +68,6 @@ void SaveImg(const std::string imgPath, const cv::Mat img){
 int main(int argc, char** argv)
 {
     // Input and image preprocessing
-    ColorTable table;
     std::string imgPath = argv[1];
     // std::string imgPath = "/home/angel/Pictures/palette5.png";
     cv::Mat img = cv::imread(imgPath);
@@ -95,7 +93,7 @@ int main(int argc, char** argv)
     // SaveImg(imgPath, palette_img);
 
     // change single color
-    int indColor = 4;
+    int indColor = 2;
     cv::Mat imgNewColor = img.clone();
     cv::Vec3b newColor =  cv::Vec3b(0, 255, 255); 
     analyzer.HueShift(palette[indColor], newColor, imgNewColor);

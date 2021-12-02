@@ -10,6 +10,13 @@
 #include "utils.h"
 #include <opencv2/imgproc.hpp>
 
+#define BGR_GRID_SIZE 3; 
+#define HUE_GRID_SIZE 8; 
+#define KMEANS_CLUSTER_COUNT 5;
+// 1. BGR, 2. Hue, 3. K-Means
+#define CLUSTERER_OPTION 3; 
+
+
 /*  ---------------------------------------------------------
     BGR clusterization
     ---------------------------------------------------------*/
@@ -26,7 +33,7 @@ void BGRClusterer::ComputeClusters(const cv::Mat &img, cv::InputOutputArray &lab
 
 void BGRClusterer::Initialize(){
     // Get these from a configuration file
-    int gridSize = 3;
+    int gridSize = BGR_GRID_SIZE;
 
     _gridSize = gridSize;
 }
@@ -109,7 +116,7 @@ void HueClusterer::ComputeClusters(const cv::Mat &img, cv::InputOutputArray &lab
 
 void HueClusterer::Initialize(){
     // Get these from a configuration file
-    int gridSize = 8;
+    int gridSize = HUE_GRID_SIZE;
 
     _gridSize = gridSize;
 }
@@ -171,19 +178,57 @@ int HueClusterer::GetClusterId(const int hue)
     return clusterId;
 }
 
-/*  ---------------------------------------------------------
-    Codification of pixel positions
-    ---------------------------------------------------------*/
-int Clusterer::GetPixelId(cv::Point pixelCoordinates, int maxColums){
-    int row = pixelCoordinates.x;
-    int col = pixelCoordinates.y;
-    return row*maxColums + col;
-}
 
-cv::Point Clusterer::GetPixelCoordinates(int pixelId, int maxColums){
-    int row = floor(pixelId/maxColums);
-    int col = pixelId%maxColums;
-    return cv::Point(row, col);
+/*  ---------------------------------------------------------
+    Kmeans clusterer with OpenCV
+    ---------------------------------------------------------*/
+void KMeansClusterer::ComputeClusters(const cv::Mat &img, cv::InputOutputArray &labels, std::vector<cv::Vec3b> &centers){
+    int clusterCount = KMEANS_CLUSTER_COUNT;
+    bool optionRGB = false;
+
+    cv::Mat imgHSV;
+    std::vector<cv::Mat> hsvChannels;
+    cv::cvtColor(img, imgHSV, cv::COLOR_BGR2HSV);
+    cv::split(imgHSV, hsvChannels);
+
+    // reshape and format data for opencv kmeans
+    cv::Mat data;
+    if(optionRGB){
+        img.convertTo(data,CV_32F);
+    }else{
+        hsvChannels[0].convertTo(data, CV_32F);
+    }
+    data = data.reshape(1,data.total());
+    
+    cv::Mat labels_, centers_;
+    cv::kmeans(data, clusterCount, labels_,
+                cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 10, 1.0),
+                3, cv::KMEANS_PP_CENTERS, centers_);
+
+    // restore shape and format
+    if(optionRGB){
+        centers = centers_.reshape(3, centers_.rows);
+    }else{
+        centers_.convertTo(centers_, CV_32F);
+        // centers_ = centers_.reshape(1, centers_.rows);
+        for(int i = 0; i<centers_.total(); i++){
+            int hue = (int)centers_.at<float>(i);
+
+            cv::Mat3b ColorBGRMat; 
+            cv::Mat3b ColorHsvMat(cv::Vec3b(hue, 255, 255));
+            cv::cvtColor(ColorHsvMat, ColorBGRMat, cv::COLOR_HSV2BGR);
+
+            int r = ColorBGRMat[0][0][2];
+            int g = ColorBGRMat[0][0][1];
+            int b = ColorBGRMat[0][0][0];
+            centers.push_back(cv::Vec3b(b, g, r));
+        }
+        
+    }
+    labels_ = labels_.reshape(1, img.rows);
+    labels_.copyTo(labels);
+
+    std::vector<cv::Mat>().swap(hsvChannels);
 }
 
 /*  ---------------------------------------------------------
@@ -191,7 +236,7 @@ cv::Point Clusterer::GetPixelCoordinates(int pixelId, int maxColums){
     ---------------------------------------------------------*/
 Clusterer* ClustererFactory::GetObject(){
     // Get this option from a configuration file
-    int option = 2;
+    int option = CLUSTERER_OPTION;
 
     switch (option)
     {
@@ -200,6 +245,9 @@ Clusterer* ClustererFactory::GetObject(){
             break;
         case 2:
             product = new HueClusterer;
+            break;
+        case 3:
+            product = new KMeansClusterer;
             break;
         default:
             product = nullptr;

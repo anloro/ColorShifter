@@ -14,8 +14,6 @@ class Clusterer {
 public:
     virtual void ComputeClusters(const cv::Mat &img, cv::InputOutputArray &labels, std::vector<cv::Vec3b> &centers) = 0;
 protected:
-    int GetPixelId(cv::Point pixelCoordinates, int maxColums);
-    cv::Point GetPixelCoordinates(int pixelId, int maxColums);
     int _gridSize;
     cv::Mat _labels; // [pixelId, clusterId]
     std::vector<cv::Vec3b> _centers; // [b, g, r]
@@ -41,6 +39,11 @@ private:
     void ComputeCenters();
     void FixedSizeGridClusterization(const cv::Mat &img);
     int GetClusterId(const int hue);
+};
+
+class KMeansClusterer : public Clusterer{
+public:
+    void ComputeClusters(const cv::Mat &img, cv::InputOutputArray &labels, std::vector<cv::Vec3b> &centers) override;
 };
 
 class ClustererFactory {

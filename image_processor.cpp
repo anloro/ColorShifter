@@ -6,13 +6,14 @@
  */
 
 
-#include "image_analyzer.h"
+#include "image_processor.h"
 #include "utils.h"
 
+#define PALETTE_SIZE 5;
 
 void ImgProcessor::Initialize(){
     // Get these from a configuration file
-    int paletteSize = 5;
+    int paletteSize = PALETTE_SIZE;
 
     ClustererFactory clustererCreator = ClustererFactory();
     _clusterer = clustererCreator.GetObject();
