@@ -15,6 +15,7 @@
 #define KMEANS_CLUSTER_COUNT 5;
 // 1. BGR, 2. Hue, 3. K-Means
 #define CLUSTERER_OPTION 3; 
+#define KMEANS_RGB true;
 
 
 /*  ---------------------------------------------------------
@@ -184,7 +185,7 @@ int HueClusterer::GetClusterId(const int hue)
     ---------------------------------------------------------*/
 void KMeansClusterer::ComputeClusters(const cv::Mat &img, cv::InputOutputArray &labels, std::vector<cv::Vec3b> &centers){
     int clusterCount = KMEANS_CLUSTER_COUNT;
-    bool optionRGB = false;
+    bool optionRGB = KMEANS_RGB;
 
     cv::Mat imgHSV;
     std::vector<cv::Mat> hsvChannels;

@@ -139,7 +139,8 @@ void ImgProcessor::HueShift(cv::Vec3b color, cv::Vec3b newColor, cv::Mat &img){
                 int sat = colorVec[1];
                 int val = colorVec[2];
 
-                uchar newHue = (hue + hueTransform)%180; 
+                uchar newHue = newColorHue; 
+                // uchar newHue = (hue + hueTransform)%180; 
                 cv::Vec3b newColorVec = cv::Vec3b(newHue, sat, val);
                 
                 imgHSV.at<cv::Vec3b>(row, col) = newColorVec;
